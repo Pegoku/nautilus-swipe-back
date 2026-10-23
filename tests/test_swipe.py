@@ -37,6 +37,8 @@ class ControllerTests(unittest.TestCase):
     def setUp(self):
         # Avoid opening a desktop window during unit tests.
         self.binding = WindowSwipe.__new__(WindowSwipe)
+        self.binding.indicator = None
+        self.binding.get_indicator = Mock(return_value=Mock())
         self.controller = Mock()
         self.binding.begin(self.controller)
         self.target = Mock()
@@ -83,6 +85,24 @@ class ControllerTests(unittest.TestCase):
         self.assertFalse(self.binding.scroll(self.controller, -2, -200))
         self.binding.end(self.controller)
         self.target.activate_action.assert_not_called()
+
+    def test_indicator_tracks_swipe_and_completes_on_release(self):
+        indicator = self.binding.get_indicator.return_value
+        self.binding.scroll(self.controller, -120, 0)
+        indicator.update.assert_called_once_with(120)
+        self.binding.end(self.controller)
+        indicator.finish.assert_called_once_with(True)
+
+    def test_short_swipe_animates_cancellation_without_navigation(self):
+        indicator = self.binding.get_indicator.return_value
+        self.binding.scroll(self.controller, -40, 0)
+        self.binding.end(self.controller)
+        indicator.finish.assert_called_once_with(False)
+        self.target.activate_action.assert_not_called()
+
+    def test_vertical_scroll_does_not_show_indicator(self):
+        self.binding.scroll(self.controller, 0, -120)
+        self.binding.get_indicator.assert_not_called()
 
 
 if __name__ == "__main__":

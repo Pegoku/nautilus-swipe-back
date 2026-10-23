@@ -4,7 +4,10 @@ A per-user Nautilus Python extension. Swipe two fingers right over the file
 area to go back, or left to go forward. Navigation happens when you lift your
 fingers after at least 100 logical pixels. Vertical scrolling, the sidebar,
 mouse wheels, Ctrl+scroll zoom, and desktop workspace gestures keep their
-normal behavior. No browser-style arrow animation is included.
+normal behavior. A circular arrow slides in from the corresponding edge as
+you swipe and lights up at the navigation threshold. On release it pulses
+and fades, or retreats if the swipe was cancelled. It follows the desktop
+accent color and respects the GTK reduced-animation setting.
 
 Requires Nautilus with nautilus-python, PyGObject, and GTK 4.20 or newer.
 Tested against the installed Nautilus 51.1 and GTK 4.24 on Hyprland/Wayland.

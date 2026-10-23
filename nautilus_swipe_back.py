@@ -1,5 +1,7 @@
 """Two-finger history navigation for Nautilus 4.x, using GTK scroll events."""
 
+import math
+
 import gi
 
 gi.require_version("Gtk", "4.0")
@@ -38,10 +40,101 @@ class Swipe:
         return None
 
 
+class SwipeIndicator(Gtk.DrawingArea):
+    """A non-interactive overlay that follows the swipe and fades on release."""
+
+    def __init__(self):
+        super().__init__()
+        self.set_can_target(False)
+        self.set_hexpand(True)
+        self.set_vexpand(True)
+        self.set_halign(Gtk.Align.FILL)
+        self.set_valign(Gtk.Align.FILL)
+        self.set_draw_func(self.draw)
+        self.distance = 0
+        self.fade = 1.0
+        self.released = False
+        self.tick = 0
+        self.set_visible(False)
+
+    def cancel(self):
+        if self.tick:
+            self.remove_tick_callback(self.tick)
+            self.tick = 0
+        self.set_visible(False)
+
+    def update(self, distance):
+        self.cancel()
+        self.distance = distance
+        self.fade = 1.0
+        self.released = False
+        self.set_visible(True)
+        self.queue_draw()
+
+    def finish(self, navigated):
+        if not self.get_visible():
+            return
+        self.released = navigated
+        if not self.get_settings().get_property("gtk-enable-animations"):
+            self.cancel()
+            return
+        self.start_time = None
+        self.tick = self.add_tick_callback(self.animate)
+
+    def animate(self, widget, clock):
+        now = clock.get_frame_time()
+        if self.start_time is None:
+            self.start_time = now
+        self.fade = max(0.0, 1.0 - (now - self.start_time) / 180_000)
+        self.queue_draw()
+        if self.fade == 0:
+            self.tick = 0
+            self.set_visible(False)
+            return False
+        return True
+
+    def draw(self, area, cr, width, height):
+        progress = min(abs(self.distance) / Swipe.THRESHOLD, 1.0)
+        ready = progress >= 1.0
+        eased = 1.0 - (1.0 - progress) ** 2
+        offset = 16 + 52 * eased
+        # A cancelled swipe retreats to its edge; a completed swipe pulses.
+        if not self.released:
+            offset *= self.fade
+        x = offset if self.distance > 0 else width - offset
+        y = height / 2
+        radius = 20 + (3 * (1 - self.fade) if self.released else 0)
+        found, accent = self.get_style_context().lookup_color("accent_bg_color")
+        rgb = (accent.red, accent.green, accent.blue) if found else (0.20, 0.52, 0.89)
+        alpha = self.fade * min(progress * 3, 1.0)
+        cr.set_source_rgba(*rgb, 0.17 * alpha)
+        cr.arc(x, y, radius + 10, 0, math.tau)
+        cr.fill()
+        cr.set_source_rgba(*rgb, (1.0 if ready else 0.65) * alpha)
+        cr.arc(x, y, radius, 0, math.tau)
+        cr.fill()
+        if ready:
+            found, fg = self.get_style_context().lookup_color("accent_fg_color")
+            foreground = (fg.red, fg.green, fg.blue) if found else (1, 1, 1)
+        else:
+            foreground = (1, 1, 1)
+        cr.set_source_rgba(*foreground, alpha)
+        cr.set_line_width(2)
+        cr.set_line_cap(1)  # CAIRO_LINE_CAP_ROUND
+        direction = -1 if self.distance > 0 else 1
+        cr.move_to(x - direction * 5, y)
+        cr.line_to(x + direction * 5, y)
+        cr.move_to(x, y - 4)
+        cr.line_to(x + direction * 5, y)
+        cr.line_to(x, y + 4)
+        cr.stroke()
+
+
 class WindowSwipe:
     def __init__(self, window):
         self.swipe = Swipe()
         self.target = None
+        self.indicator = None
         self.controller = Gtk.EventControllerScroll.new(
             Gtk.EventControllerScrollFlags.BOTH_AXES
         )
@@ -52,6 +145,9 @@ class WindowSwipe:
         window.add_controller(self.controller)
 
     def begin(self, controller):
+        if self.indicator is not None:
+            self.indicator.cancel()
+        self.indicator = None
         self.swipe = Swipe()
         self.target = None
 
@@ -84,12 +180,37 @@ class WindowSwipe:
         # Normalize to physical finger motion, independently of natural scrolling.
         if event.get_relative_direction() == Gdk.ScrollRelativeDirection.INVERTED:
             dx, dy = -dx, -dy
-        return self.swipe.update(dx, dy)
+        horizontal = self.swipe.update(dx, dy)
+        if horizontal:
+            if self.indicator is None:
+                self.indicator = self.get_indicator(self.target)
+            if self.indicator is not None:
+                self.indicator.update(self.swipe.x)
+        return horizontal
+
+    @staticmethod
+    def get_indicator(target):
+        # Nautilus already overlays the file view for its floating status bar.
+        # Add a pass-through drawing layer without reparenting any of its UI.
+        overlay = target.get_first_child()
+        if not isinstance(overlay, Gtk.Overlay):
+            return None
+        if not hasattr(target, "_swipe_indicator"):
+            indicator = SwipeIndicator()
+            overlay.add_overlay(indicator)
+            overlay.set_measure_overlay(indicator, False)
+            overlay.set_clip_overlay(indicator, True)
+            target._swipe_indicator = indicator
+        return target._swipe_indicator
 
     def end(self, controller):
         action = self.swipe.finish()
         target = self.target
+        indicator = self.indicator
+        self.indicator = None
         self.begin(controller)
+        if indicator is not None:
+            indicator.finish(action is not None)
         if target is not None and action is not None:
             target.activate_action(action, None)
 
