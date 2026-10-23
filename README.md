@@ -1,7 +1,7 @@
 # Nautilus swipe navigation
 
-A per-user Nautilus Python extension. Swipe two fingers right over the file
-area to go back, or left to go forward. Navigation happens when you lift your
+A per-user Nautilus Python extension. Swipe two fingers left over the file
+area to go back, or right to go forward. Navigation happens when you lift your
 fingers after at least 100 logical pixels. Vertical scrolling, the sidebar,
 mouse wheels, Ctrl+scroll zoom, and desktop workspace gestures keep their
 normal behavior. A circular arrow slides in from the corresponding edge as

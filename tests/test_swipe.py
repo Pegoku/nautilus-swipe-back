@@ -6,7 +6,7 @@ from nautilus_swipe_back import Gdk, Gtk, Swipe, WindowSwipe
 
 class SwipeTests(unittest.TestCase):
     def test_horizontal_motion_navigates_in_both_directions(self):
-        for dx, action in ((25, "slot.back"), (-25, "slot.forward")):
+        for dx, action in ((25, "slot.forward"), (-25, "slot.back")):
             with self.subTest(action=action):
                 swipe = Swipe()
                 for _ in range(5):
@@ -54,16 +54,16 @@ class ControllerTests(unittest.TestCase):
         self.assertTrue(self.binding.scroll(self.controller, -120, 0))
         self.target.activate_action.assert_not_called()
         self.binding.end(self.controller)
-        self.target.activate_action.assert_called_once_with("slot.back", None)
+        self.target.activate_action.assert_called_once_with("slot.forward", None)
         # A repeated end event or inertia cannot repeat navigation.
         self.binding.end(self.controller)
         self.target.activate_action.assert_called_once()
 
-    def test_non_natural_left_swipe_goes_forward(self):
+    def test_non_natural_left_swipe_goes_back(self):
         self.event.get_relative_direction.return_value = Gdk.ScrollRelativeDirection.IDENTICAL
         self.binding.scroll(self.controller, -120, 0)
         self.binding.end(self.controller)
-        self.target.activate_action.assert_called_once_with("slot.forward", None)
+        self.target.activate_action.assert_called_once_with("slot.back", None)
 
     def test_mouse_wheels_and_modified_scrolling_do_not_navigate(self):
         cases = ("wheel", "mouse", "ctrl", "shift")
@@ -121,7 +121,7 @@ class ControllerTests(unittest.TestCase):
         window.pick.assert_called_once_with(330, 190, Gtk.PickFlags.DEFAULT)
         self.event.get_position.assert_not_called()
         self.binding.end(self.controller)
-        self.target.activate_action.assert_called_once_with("slot.back", None)
+        self.target.activate_action.assert_called_once_with("slot.forward", None)
 
     def test_pointer_outside_window_does_not_start_swipe(self):
         self.binding.target = None
@@ -134,10 +134,10 @@ class ControllerTests(unittest.TestCase):
         self.event.get_relative_direction.return_value = Gdk.ScrollRelativeDirection.UNKNOWN
         self.binding.scroll(self.controller, -120, 0)
         self.binding.end(self.controller)
-        self.target.activate_action.assert_called_once_with("slot.back", None)
+        self.target.activate_action.assert_called_once_with("slot.forward", None)
 
     def test_unavailable_history_has_no_arrow_or_navigation(self):
-        for dx, action in ((-120, "slot.back"), (120, "slot.forward")):
+        for dx, action in ((-120, "slot.forward"), (120, "slot.back")):
             with self.subTest(action=action):
                 self.setUp()
                 self.binding.action_available.return_value = False

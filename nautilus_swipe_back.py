@@ -36,7 +36,7 @@ class Swipe:
 
     def finish(self):
         if self.axis == "horizontal" and abs(self.x) >= self.THRESHOLD:
-            return "slot.back" if self.x > 0 else "slot.forward"
+            return "slot.back" if self.x < 0 else "slot.forward"
         return None
 
 
@@ -101,7 +101,7 @@ class SwipeIndicator(Gtk.DrawingArea):
         # A cancelled swipe retreats to its edge; a completed swipe pulses.
         if not self.released:
             offset *= self.fade
-        x = offset if self.distance > 0 else width - offset
+        x = offset if self.distance < 0 else width - offset
         y = height / 2
         radius = 20 + (3 * (1 - self.fade) if self.released else 0)
         found, accent = self.get_style_context().lookup_color("accent_bg_color")
@@ -121,7 +121,7 @@ class SwipeIndicator(Gtk.DrawingArea):
         cr.set_source_rgba(*foreground, alpha)
         cr.set_line_width(2)
         cr.set_line_cap(1)  # CAIRO_LINE_CAP_ROUND
-        direction = -1 if self.distance > 0 else 1
+        direction = -1 if self.distance < 0 else 1
         cr.move_to(x - direction * 5, y)
         cr.line_to(x + direction * 5, y)
         cr.move_to(x, y - 4)
@@ -189,7 +189,7 @@ class WindowSwipe:
             dx, dy = -dx, -dy
         horizontal = self.swipe.update(dx, dy)
         if horizontal:
-            action = "slot.back" if self.swipe.x > 0 else "slot.forward"
+            action = "slot.back" if self.swipe.x < 0 else "slot.forward"
             if not self.action_available(action):
                 if self.indicator is not None:
                     self.indicator.cancel()
