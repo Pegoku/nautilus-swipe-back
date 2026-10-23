@@ -14,6 +14,7 @@ class Swipe:
     """Lock each touchpad sequence to its initial intentional axis."""
 
     THRESHOLD = 100  # GTK logical surface pixels
+    FLICK_VELOCITY = 600  # GTK logical surface pixels per second
     AXIS_THRESHOLD = 12
     AXIS_RATIO = 1.5
 
@@ -34,8 +35,14 @@ class Swipe:
                 self.axis = "horizontal"
         return self.axis == "horizontal"
 
-    def finish(self):
-        if self.axis == "horizontal" and abs(self.x) >= self.THRESHOLD:
+    def finish(self, velocity_x=0.0, velocity_y=0.0):
+        long_swipe = abs(self.x) >= self.THRESHOLD
+        flick = (
+            abs(velocity_x) >= self.FLICK_VELOCITY
+            and abs(velocity_x) >= self.AXIS_RATIO * abs(velocity_y)
+            and velocity_x * self.x > 0
+        )
+        if self.axis == "horizontal" and (long_swipe or flick):
             return "slot.back" if self.x < 0 else "slot.forward"
         return None
 
@@ -95,7 +102,7 @@ class SwipeIndicator(Gtk.DrawingArea):
 
     def draw(self, area, cr, width, height):
         progress = min(abs(self.distance) / Swipe.THRESHOLD, 1.0)
-        ready = progress >= 1.0
+        ready = progress >= 1.0 or self.released
         eased = 1.0 - (1.0 - progress) ** 2
         offset = 16 + 52 * eased
         # A cancelled swipe retreats to its edge; a completed swipe pulses.
@@ -135,13 +142,17 @@ class WindowSwipe:
         self.swipe = Swipe()
         self.target = None
         self.indicator = None
+        self.direction_sign = 1
         self.controller = Gtk.EventControllerScroll.new(
             Gtk.EventControllerScrollFlags.BOTH_AXES
+            | Gtk.EventControllerScrollFlags.KINETIC
         )
         self.controller.set_propagation_phase(Gtk.PropagationPhase.CAPTURE)
         self.controller.connect("scroll-begin", self.begin)
         self.controller.connect("scroll", self.scroll)
-        self.controller.connect("scroll-end", self.end)
+        # With KINETIC, GTK emits decelerate immediately after scroll-end,
+        # even at zero velocity. Finish once, with both distance and velocity.
+        self.controller.connect("decelerate", self.end)
         window.add_controller(self.controller)
 
     def begin(self, controller):
@@ -150,6 +161,7 @@ class WindowSwipe:
         self.indicator = None
         self.swipe = Swipe()
         self.target = None
+        self.direction_sign = 1
 
     def scroll(self, controller, dx, dy):
         event = controller.get_current_event()
@@ -185,8 +197,10 @@ class WindowSwipe:
 
         # Hyprland may omit relative-direction metadata. In that case use
         # natural scrolling, which is enabled on this system: right is -dx.
-        if event.get_relative_direction() != Gdk.ScrollRelativeDirection.IDENTICAL:
-            dx, dy = -dx, -dy
+        self.direction_sign = (
+            1 if event.get_relative_direction() == Gdk.ScrollRelativeDirection.IDENTICAL else -1
+        )
+        dx, dy = dx * self.direction_sign, dy * self.direction_sign
         horizontal = self.swipe.update(dx, dy)
         if horizontal:
             action = "slot.back" if self.swipe.x < 0 else "slot.forward"
@@ -232,8 +246,10 @@ class WindowSwipe:
             target._swipe_indicator = indicator
         return target._swipe_indicator
 
-    def end(self, controller):
-        action = self.swipe.finish()
+    def end(self, controller, velocity_x=0.0, velocity_y=0.0):
+        action = self.swipe.finish(
+            velocity_x * self.direction_sign, velocity_y * self.direction_sign
+        )
         if action is not None and not self.action_available(action):
             action = None
         target = self.target

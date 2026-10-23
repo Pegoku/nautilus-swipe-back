@@ -2,9 +2,12 @@
 
 A per-user Nautilus Python extension. Swipe two fingers left over the file
 area to go back, or right to go forward. Navigation happens when you lift your
-fingers after at least 100 logical pixels. Vertical scrolling, the sidebar,
-mouse wheels, Ctrl+scroll zoom, and desktop workspace gestures keep their
-normal behavior. A circular arrow slides in from the corresponding edge as
+fingers after at least 100 logical pixels, or after a short horizontal flick
+at 600 logical pixels per second or faster. The 100-pixel distance
+threshold still works at any speed. Flicks must pass the same initial
+12-pixel horizontal axis lock and keep moving in the swipe direction.
+Vertical scrolling, the sidebar, mouse wheels, Ctrl+scroll zoom, and desktop
+workspace gestures keep their normal behavior. A circular arrow slides in from the corresponding edge as
 you swipe and lights up at the navigation threshold. On release it pulses
 and fades, or retreats if the swipe was cancelled. It follows the desktop
 accent color and respects the GTK reduced-animation setting.

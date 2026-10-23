@@ -32,6 +32,34 @@ class SwipeTests(unittest.TestCase):
         swipe.update(-90, 0)
         self.assertIsNone(swipe.finish())
 
+    def test_short_fast_flicks_navigate_in_both_directions(self):
+        for distance, velocity, action in ((-30, -800, "slot.back"), (30, 800, "slot.forward")):
+            with self.subTest(action=action):
+                swipe = Swipe()
+                swipe.update(distance, 1)
+                self.assertEqual(swipe.finish(velocity, 30), action)
+
+    def test_distance_threshold_remains_exactly_100_pixels(self):
+        for distance, expected in ((99, None), (100, "slot.forward")):
+            with self.subTest(distance=distance):
+                swipe = Swipe()
+                swipe.update(distance, 0)
+                self.assertEqual(swipe.finish(1, 0), expected)
+
+    def test_flick_velocity_threshold_is_600_pixels_per_second(self):
+        for velocity, expected in ((599, None), (600, "slot.forward")):
+            with self.subTest(velocity=velocity):
+                swipe = Swipe()
+                swipe.update(30, 0)
+                self.assertEqual(swipe.finish(velocity, 0), expected)
+
+    def test_flick_rejects_jitter_diagonals_and_release_reversal(self):
+        for dx, dy, vx, vy in ((5, 0, 900, 0), (30, 0, 700, 600), (30, 0, -900, 0), (1, 30, 900, 0)):
+            with self.subTest(deltas=(dx, dy), velocity=(vx, vy)):
+                swipe = Swipe()
+                swipe.update(dx, dy)
+                self.assertIsNone(swipe.finish(vx, vy))
+
 
 class ControllerTests(unittest.TestCase):
     def setUp(self):
@@ -153,6 +181,51 @@ class ControllerTests(unittest.TestCase):
         self.binding.end(self.controller)
         self.target.activate_action.assert_not_called()
         self.binding.get_indicator.return_value.finish.assert_called_once_with(False)
+
+    def test_flick_velocity_uses_the_same_direction_as_scroll_distance(self):
+        for direction, dx, vx in (
+            (Gdk.ScrollRelativeDirection.IDENTICAL, -30, -800),
+            (Gdk.ScrollRelativeDirection.INVERTED, 30, 800),
+            (Gdk.ScrollRelativeDirection.UNKNOWN, 30, 800),
+        ):
+            with self.subTest(direction=direction):
+                self.setUp()
+                self.event.get_relative_direction.return_value = direction
+                self.binding.scroll(self.controller, dx, 0)
+                self.binding.end(self.controller, vx, 0)
+                self.target.activate_action.assert_called_once_with("slot.back", None)
+                self.binding.get_indicator.return_value.finish.assert_called_once_with(True)
+
+    def test_flick_does_not_navigate_when_history_is_unavailable(self):
+        self.binding.action_available.return_value = False
+        self.binding.scroll(self.controller, 30, 0)
+        self.binding.end(self.controller, 800, 0)
+        self.target.activate_action.assert_not_called()
+        self.binding.get_indicator.assert_not_called()
+
+    def test_real_controller_finishes_once_after_end_and_decelerate(self):
+        binding = WindowSwipe(Mock())
+        self.assertTrue(binding.controller.get_flags() & Gtk.EventControllerScrollFlags.KINETIC)
+        target = Mock()
+        binding.target = target
+        binding.action_available = Mock(return_value=True)
+        binding.swipe.update(-30, 0)
+        binding.controller.emit("scroll-end")
+        target.activate_action.assert_not_called()
+        binding.controller.emit("decelerate", -800, 0)
+        target.activate_action.assert_called_once_with("slot.back", None)
+        binding.controller.emit("decelerate", -800, 0)
+        target.activate_action.assert_called_once()
+
+    def test_real_controller_keeps_long_slow_swipes_working(self):
+        binding = WindowSwipe(Mock())
+        target = Mock()
+        binding.target = target
+        binding.action_available = Mock(return_value=True)
+        binding.swipe.update(-100, 0)
+        binding.controller.emit("scroll-end")
+        binding.controller.emit("decelerate", 0, 0)
+        target.activate_action.assert_called_once_with("slot.back", None)
 
 
 if __name__ == "__main__":
