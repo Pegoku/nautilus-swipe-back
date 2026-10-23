@@ -8,6 +8,9 @@ normal behavior. A circular arrow slides in from the corresponding edge as
 you swipe and lights up at the navigation threshold. On release it pulses
 and fades, or retreats if the swipe was cancelled. It follows the desktop
 accent color and respects the GTK reduced-animation setting.
+Arrows and navigation are enabled only when the matching native history
+button is enabled. On compositors that omit scroll-direction metadata,
+the extension assumes natural scrolling, as configured on this system.
 
 Requires Nautilus with nautilus-python, PyGObject, and GTK 4.20 or newer.
 Tested against the installed Nautilus 51.1 and GTK 4.24 on Hyprland/Wayland.

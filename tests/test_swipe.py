@@ -39,6 +39,7 @@ class ControllerTests(unittest.TestCase):
         self.binding = WindowSwipe.__new__(WindowSwipe)
         self.binding.indicator = None
         self.binding.get_indicator = Mock(return_value=Mock())
+        self.binding.action_available = Mock(return_value=True)
         self.controller = Mock()
         self.binding.begin(self.controller)
         self.target = Mock()
@@ -128,6 +129,30 @@ class ControllerTests(unittest.TestCase):
         surface.get_device_position.return_value = (False, 0, 0, 0)
         self.assertFalse(self.binding.scroll(self.controller, -120, 0))
         self.binding.get_indicator.assert_not_called()
+
+    def test_missing_direction_metadata_uses_natural_scrolling(self):
+        self.event.get_relative_direction.return_value = Gdk.ScrollRelativeDirection.UNKNOWN
+        self.binding.scroll(self.controller, -120, 0)
+        self.binding.end(self.controller)
+        self.target.activate_action.assert_called_once_with("slot.back", None)
+
+    def test_unavailable_history_has_no_arrow_or_navigation(self):
+        for dx, action in ((-120, "slot.back"), (120, "slot.forward")):
+            with self.subTest(action=action):
+                self.setUp()
+                self.binding.action_available.return_value = False
+                self.assertTrue(self.binding.scroll(self.controller, dx, 0))
+                self.binding.action_available.assert_called_with(action)
+                self.binding.get_indicator.assert_not_called()
+                self.binding.end(self.controller)
+                self.target.activate_action.assert_not_called()
+
+    def test_history_disabled_before_release_cancels_navigation(self):
+        self.binding.scroll(self.controller, -120, 0)
+        self.binding.action_available.return_value = False
+        self.binding.end(self.controller)
+        self.target.activate_action.assert_not_called()
+        self.binding.get_indicator.return_value.finish.assert_called_once_with(False)
 
 
 if __name__ == "__main__":

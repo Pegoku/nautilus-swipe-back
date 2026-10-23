@@ -183,16 +183,39 @@ class WindowSwipe:
             if self.target is None:
                 return False
 
-        # Normalize to physical finger motion, independently of natural scrolling.
-        if event.get_relative_direction() == Gdk.ScrollRelativeDirection.INVERTED:
+        # Hyprland may omit relative-direction metadata. In that case use
+        # natural scrolling, which is enabled on this system: right is -dx.
+        if event.get_relative_direction() != Gdk.ScrollRelativeDirection.IDENTICAL:
             dx, dy = -dx, -dy
         horizontal = self.swipe.update(dx, dy)
         if horizontal:
+            action = "slot.back" if self.swipe.x > 0 else "slot.forward"
+            if not self.action_available(action):
+                if self.indicator is not None:
+                    self.indicator.cancel()
+                    self.indicator = None
+                return True
             if self.indicator is None:
                 self.indicator = self.get_indicator(self.target)
             if self.indicator is not None:
                 self.indicator.update(self.swipe.x)
         return horizontal
+
+    def action_available(self, action):
+        # Read the native history buttons' action-driven sensitivity instead
+        # of duplicating Nautilus's per-tab history or accessing private data.
+        def find(widget):
+            if isinstance(widget, Gtk.Actionable) and widget.get_action_name() == action:
+                return widget.get_sensitive()
+            child = widget.get_first_child()
+            while child is not None:
+                available = find(child)
+                if available is not None:
+                    return available
+                child = child.get_next_sibling()
+            return None
+
+        return find(self.controller.get_widget()) is True
 
     @staticmethod
     def get_indicator(target):
@@ -211,6 +234,8 @@ class WindowSwipe:
 
     def end(self, controller):
         action = self.swipe.finish()
+        if action is not None and not self.action_available(action):
+            action = None
         target = self.target
         indicator = self.indicator
         self.indicator = None
