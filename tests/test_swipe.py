@@ -1,5 +1,5 @@
 import unittest
-from unittest.mock import Mock
+from unittest.mock import Mock, patch
 
 from nautilus_swipe_back import Gdk, Gtk, Swipe, WindowSwipe
 
@@ -102,6 +102,31 @@ class ControllerTests(unittest.TestCase):
 
     def test_vertical_scroll_does_not_show_indicator(self):
         self.binding.scroll(self.controller, 0, -120)
+        self.binding.get_indicator.assert_not_called()
+
+    def test_coordinate_less_scroll_uses_surface_pointer_to_find_file_view(self):
+        self.binding.target = None
+        # Actual GdkScrollEvents always return False and NaN coordinates.
+        self.event.get_position.return_value = (False, float("nan"), float("nan"))
+        window = self.controller.get_widget.return_value
+        surface = window.get_surface.return_value
+        pointer = surface.get_display.return_value.get_default_seat.return_value.get_pointer.return_value
+        surface.get_device_position.return_value = (True, 340, 200, 0)
+        window.get_surface_transform.return_value = (-10, -10)
+        window.pick.return_value = self.target
+        with patch("nautilus_swipe_back.GObject.type_name", return_value="NautilusFilesView"):
+            self.assertTrue(self.binding.scroll(self.controller, -120, 0))
+        surface.get_device_position.assert_called_once_with(pointer)
+        window.pick.assert_called_once_with(330, 190, Gtk.PickFlags.DEFAULT)
+        self.event.get_position.assert_not_called()
+        self.binding.end(self.controller)
+        self.target.activate_action.assert_called_once_with("slot.back", None)
+
+    def test_pointer_outside_window_does_not_start_swipe(self):
+        self.binding.target = None
+        surface = self.controller.get_widget.return_value.get_surface.return_value
+        surface.get_device_position.return_value = (False, 0, 0, 0)
+        self.assertFalse(self.binding.scroll(self.controller, -120, 0))
         self.binding.get_indicator.assert_not_called()
 
 

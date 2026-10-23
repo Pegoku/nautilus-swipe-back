@@ -165,10 +165,16 @@ class WindowSwipe:
             return False
 
         if self.target is None:
-            valid, x, y = event.get_position()
-            if not valid:
+            window = controller.get_widget()
+            surface = window.get_surface()
+            pointer = surface.get_display().get_default_seat().get_pointer()
+            # Scroll events have no coordinates in GTK 4. Query the seat's
+            # logical pointer, not the separate finger-scrolling device.
+            inside, x, y, _state = surface.get_device_position(pointer)
+            if not inside:
                 return False
-            widget = controller.get_widget().pick(x, y, Gtk.PickFlags.DEFAULT)
+            offset_x, offset_y = window.get_surface_transform()
+            widget = window.pick(x + offset_x, y + offset_y, Gtk.PickFlags.DEFAULT)
             while widget is not None:
                 if GObject.type_name(widget) == "NautilusFilesView":
                     self.target = widget
